@@ -471,6 +471,21 @@ class TalkMapper extends ApiMapper
     }
 
     /**
+     * Returns the talk_speaker entry for a talk, by the speaker name (plain text)
+     *
+     * @param $talk_id
+     * @param $speaker_name
+     * @return array|bool The talk_speaker entry, or false if not found
+     */
+    public function getTalkSpeakerEntryByName($talk_id, $speaker_name)
+    {
+        $sql  = "select * FROM talk_speaker WHERE talk_id = :talk_id and speaker_name = :speaker_name";
+        $stmt = $this->_db>prepare($sql);
+
+        return $stmt->execute(array("talk_id" => (int) $talk_id, "speaker_name" => $speaker_name));
+    }
+
+    /**
      * This talk has no stub, so create, store and return one
      *
      * @param int $talk_id The talk that needs a new stub

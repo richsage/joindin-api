@@ -139,6 +139,56 @@ class TalksController extends ApiController
                     $talk_mapper->setUserStarred($talk_id, $request->user_id);
                     header("Location: " . $request->base . $request->path_info, null, 201);
                     exit;
+                case 'speakers':
+                    $speaker_name = $request->getParameter('speaker_name');
+                    if (empty($speaker_name)) {
+                        throw new Exception('The field "speaker_name" is required', 400);
+                    }
+                    $username = $request->getParameter('username');
+                    if (empty($username)) {
+                        throw new Exception('The field "username" is required', 400);
+                    }
+
+                    $user_mapper = new UserMapper($db, $request);
+                    $event_mapper = new EventMapper($db, $request);
+
+                    // Check if the submitted username is the current logged-in user
+                    // or if the current user is an event/site-admin
+                    $is_submitting_user = false;
+                    $is_admin = false;
+                    $users       = $user_mapper->getUserById($request->user_id);
+                    $thisUser    = $users['users'][0];
+                    if ($thisUser['username'] == $username) {
+                        $is_submitting_user = true;
+                    }
+                    if ($thisUser['admin'] || $event_mapper->thisUserHasAdminOn($talk['event_id'])) {
+                        $is_admin = true;
+                    }
+                    if (!$is_submitting_user && !$is_admin) {
+                        throw new Exception('You must be an event/site admin or the submitting user to place this claim', 403);
+                    }
+
+                    $talk_mapper = new TalkMapper($db);
+                    $speaker_entry = $talk_mapper->getTalkSpeakerEntryByName($talk_id, $speaker_name);
+                    if (!$speaker_entry) {
+                        throw new Exception('Speaker entry does not exist for this talk', 400);
+                    }
+
+                    $talk_claim_mapper = new TalkClaimMapper($db);
+                    if ($is_submitting_user) {
+                        $claim_id = $talk_claim_mapper->addPendingClaimFromSpeaker($talk_id, $speaker_entry['ID'], $request->user_id);
+                        // TODO email to event admins
+                    } else {
+                        // Event admin
+                        $claim_id = $talk_claim_mapper->addPendingClaimForSpeaker($talk_id, $speaker_entry['ID'], $request->user_id);
+                        // TODO email to speaker
+                    }
+
+                    $uri = $request->base . '/' . $request->version . '/talk/' . $claim_id;
+                    header("Location: $uri", 201);
+
+                    break;
+
                 default:
                     throw new Exception("Operation not supported, sorry", 404);
             }
