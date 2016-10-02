@@ -51,7 +51,7 @@ class TalksController extends ApiController
             throw new Exception("You must be logged in to create data", 400);
         }
         $talk_id = $this->getItemId($request);
-        
+
         // Retrieve the talk. It if doesn't exist, then 404 with talk not found
         $talk= $this->getTalkById($db, $request, $talk_id);
 
@@ -140,6 +140,7 @@ class TalksController extends ApiController
                     header("Location: " . $request->base . $request->path_info, null, 201);
                     exit;
                 case 'speakers':
+                    $user_id = $request->user_id;
                     $speaker_name = $request->getParameter('speaker_name');
                     if (empty($speaker_name)) {
                         throw new Exception('The field "speaker_name" is required', 400);
@@ -156,7 +157,7 @@ class TalksController extends ApiController
                     // or if the current user is an event/site-admin
                     $is_submitting_user = false;
                     $is_admin = false;
-                    $users       = $user_mapper->getUserById($request->user_id);
+                    $users       = $user_mapper->getUserById($user_id);
                     $thisUser    = $users['users'][0];
                     if ($thisUser['username'] == $username) {
                         $is_submitting_user = true;
@@ -165,22 +166,27 @@ class TalksController extends ApiController
                         $is_admin = true;
                     }
                     if (!$is_submitting_user && !$is_admin) {
-                        throw new Exception('You must be an event/site admin or the submitting user to place this claim', 403);
+                        throw new Exception('You are not authorised to submit this claim', 403);
                     }
 
                     $talk_mapper = new TalkMapper($db);
-                    $speaker_entry = $talk_mapper->getTalkSpeakerEntryByName($talk_id, $speaker_name);
-                    if (!$speaker_entry) {
+                    $talk_speaker_entry = $talk_mapper->getTalkSpeakerEntryByName($talk_id, $speaker_name);
+                    if (!$talk_speaker_entry) {
                         throw new Exception('Speaker entry does not exist for this talk', 400);
                     }
 
-                    $talk_claim_mapper = new TalkClaimMapper($db);
+                    $claim_mapper = new TalkClaimMapper($db);
                     if ($is_submitting_user) {
-                        $claim_id = $talk_claim_mapper->addPendingClaimFromSpeaker($talk_id, $speaker_entry['ID'], $request->user_id);
+                        $claim_id = $claim_mapper->addPendingClaimFromSpeaker(
+                            $talk_id, $talk_speaker_entry['ID'], $user_id, $user_id
+                        );
                         // TODO email to event admins
                     } else {
-                        // Event admin
-                        $claim_id = $talk_claim_mapper->addPendingClaimForSpeaker($talk_id, $speaker_entry['ID'], $request->user_id);
+                        // Event/site admin
+                        // TODO this isn't right
+                        $claim_id = $claim_mapper->addPendingClaimForSpeaker(
+                            $talk_id, $talk_speaker_entry['ID'], $talk_speaker_entry['']
+                        );
                         // TODO email to speaker
                     }
 
@@ -217,7 +223,7 @@ class TalksController extends ApiController
             // delete the talk
             $talk_id     = $this->getItemId($request);
             $talk_mapper = new TalkMapper($db, $request);
-            
+
             // note: use the mapper's getTalkById as we don't want to throw a not found exception
             $talk = $talk_mapper->getTalkById($talk_id);
             if (false === $talk) {
